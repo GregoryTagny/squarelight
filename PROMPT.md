@@ -8,6 +8,8 @@ The game is called Squarelight. It is inspired by tic tac toe-style point placem
 
 - The game is designed for exactly 2 players.
 - Player colors are Blue and Red.
+- The app supports Human vs Human and Human vs CPU modes.
+- In Human vs CPU mode, the human plays Blue and the CPU plays Red.
 - The default board is a 25 x 25 point grid.
 - On each turn, the active player places exactly one point on an empty grid point.
 - A square is formed by four neighboring corner points.
@@ -33,7 +35,8 @@ The game is called Squarelight. It is inspired by tic tac toe-style point placem
 - Build a playable browser app.
 - The app should show the board, current player, scores, move count, captured square count, and a play log.
 - Include board-size controls.
+- Include a game-mode control.
 - Include New Game and Undo controls.
+- In CPU mode, the CPU should prioritize capturing available squares, blocking the human's immediate captures, and building toward its own future captures.
 - The interface should be clean, modern, responsive, and usable on desktop and mobile.
 - The game should run as a self-contained static web page with no build step.
-

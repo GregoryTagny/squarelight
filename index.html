@@ -482,7 +482,7 @@
           <div class="score-value" id="blueScore">0</div>
         </div>
         <div class="score" id="redScoreBox" style="--player-color: var(--red); --active-glow: rgba(220, 38, 38, 0.24)">
-          <div class="score-label"><span class="chip"></span> Red</div>
+          <div class="score-label"><span class="chip"></span> <span id="redPlayerName">Red</span></div>
           <div class="score-value" id="redScore">0</div>
         </div>
       </div>
@@ -496,6 +496,13 @@
             <option value="15">15 x 15 points</option>
             <option value="20">20 x 20 points</option>
             <option value="25" selected>25 x 25 points</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label for="gameMode">Mode</label>
+          <select id="gameMode">
+            <option value="human" selected>Human vs Human</option>
+            <option value="cpu">Human vs CPU</option>
           </select>
         </div>
         <div class="buttons">
@@ -565,15 +572,20 @@
       moves: 0,
       history: [],
       gameOver: false,
-      endReason: ""
+      endReason: "",
+      mode: "human",
+      cpuThinking: false,
+      cpuTimer: null
     };
 
     const board = document.getElementById("board");
     const boardSize = document.getElementById("boardSize");
+    const gameMode = document.getElementById("gameMode");
     const blueScore = document.getElementById("blueScore");
     const redScore = document.getElementById("redScore");
     const blueScoreBox = document.getElementById("blueScoreBox");
     const redScoreBox = document.getElementById("redScoreBox");
+    const redPlayerName = document.getElementById("redPlayerName");
     const turnChip = document.getElementById("turnChip");
     const turnText = document.getElementById("turnText");
     const captureNote = document.getElementById("captureNote");
@@ -609,11 +621,12 @@
         scores: { ...state.scores },
         moves: state.moves,
         gameOver: state.gameOver,
-        endReason: state.endReason
+        endReason: state.endReason,
+        mode: state.mode
       };
     }
 
-    function restore(previous) {
+    function restore(previous, options = {}) {
       state.size = previous.size;
       state.current = previous.current;
       state.points = [...previous.points];
@@ -622,12 +635,19 @@
       state.moves = previous.moves;
       state.gameOver = previous.gameOver;
       state.endReason = previous.endReason || "";
+      state.mode = previous.mode || state.mode;
+      state.cpuThinking = false;
+      clearCpuTimer();
       winnerModal.classList.remove("open");
       render();
       updateLog(`${players[state.current].name}'s turn restored.`);
+      if (options.queueCpu !== false) {
+        maybeQueueCpuMove();
+      }
     }
 
     function newGame(size = state.size) {
+      clearCpuTimer();
       state.size = Number(size);
       state.current = "blue";
       state.points = Array(state.size * state.size).fill(null);
@@ -643,7 +663,9 @@
       state.history = [];
       state.gameOver = false;
       state.endReason = "";
+      state.cpuThinking = false;
       boardSize.value = String(state.size);
+      gameMode.value = state.mode;
       board.style.setProperty("--point-size", getPointSize());
       board.style.setProperty("--square-font-size", getSquareFontSize());
       winnerModal.classList.remove("open");
@@ -709,7 +731,7 @@
           point.className = `point ${owner || ""}`;
           point.style.left = `${(x / (state.size - 1)) * 100}%`;
           point.style.top = `${(y / (state.size - 1)) * 100}%`;
-          point.disabled = Boolean(owner) || state.gameOver;
+          point.disabled = Boolean(owner) || state.gameOver || isCpuTurn();
           point.setAttribute("aria-label", owner ? `${players[owner].name} point` : `Place at column ${x + 1}, row ${y + 1}`);
           point.addEventListener("click", () => placePoint(x, y));
           board.appendChild(point);
@@ -720,6 +742,7 @@
     function renderHud() {
       blueScore.textContent = state.scores.blue;
       redScore.textContent = state.scores.red;
+      redPlayerName.textContent = state.mode === "cpu" ? "CPU" : "Red";
       movesCount.textContent = state.moves;
 
       const claimed = state.squares.filter(square => square.owner).length;
@@ -728,12 +751,19 @@
       blueScoreBox.classList.toggle("active", state.current === "blue" && !state.gameOver);
       redScoreBox.classList.toggle("active", state.current === "red" && !state.gameOver);
       turnChip.style.setProperty("--player-color", players[state.current].color);
-      turnText.textContent = state.gameOver ? "Game complete" : `${players[state.current].name} to play`;
-      undoButton.disabled = state.history.length === 0;
+      if (state.gameOver) {
+        turnText.textContent = "Game complete";
+      } else if (isCpuTurn()) {
+        turnText.textContent = state.cpuThinking ? "CPU thinking" : "CPU to play";
+      } else {
+        turnText.textContent = `${players[state.current].name} to play`;
+      }
+      undoButton.disabled = state.history.length === 0 || state.cpuThinking;
     }
 
-    function placePoint(x, y) {
+    function placePoint(x, y, options = {}) {
       if (state.gameOver) return;
+      if (!options.cpu && isCpuTurn()) return;
 
       const index = pointIndex(x, y);
       if (state.points[index]) return;
@@ -762,11 +792,11 @@
       if (captures.length > 0) {
         const total = captures.length;
         const plural = captures.length === 1 ? "square" : "squares";
-        updateLog(`${players[player].name} captured ${captures.length} ${plural} for ${total} point${total === 1 ? "" : "s"}. ${players[player].name} plays again.`);
-        captureNote.textContent = `${players[player].name} scored and keeps the turn.`;
+        updateLog(`${playerLabel(player)} captured ${captures.length} ${plural} for ${total} point${total === 1 ? "" : "s"}. ${playerLabel(player)} plays again.`);
+        captureNote.textContent = `${playerLabel(player)} scored and keeps the turn.`;
       } else {
         state.current = otherPlayer(player);
-        updateLog(`${players[player].name} placed a point. ${players[state.current].name} takes the turn.`);
+        updateLog(`${playerLabel(player)} placed a point. ${playerLabel(state.current)} takes the turn.`);
         captureNote.textContent = "Complete a square to take another turn.";
       }
 
@@ -785,6 +815,132 @@
       }
 
       render();
+      maybeQueueCpuMove();
+    }
+
+    function isCpuTurn() {
+      return state.mode === "cpu" && state.current === "red" && !state.gameOver;
+    }
+
+    function playerLabel(player) {
+      if (state.mode === "cpu" && player === "red") return "CPU";
+      return players[player].name;
+    }
+
+    function maybeQueueCpuMove() {
+      if (!isCpuTurn() || state.cpuThinking) return;
+
+      state.cpuThinking = true;
+      captureNote.textContent = "CPU is choosing a point.";
+      render();
+
+      state.cpuTimer = window.setTimeout(() => {
+        state.cpuThinking = false;
+        const move = chooseCpuMove();
+        if (move) {
+          placePoint(move.x, move.y, { cpu: true });
+        } else {
+          render();
+        }
+      }, 420);
+    }
+
+    function clearCpuTimer() {
+      if (state.cpuTimer) {
+        window.clearTimeout(state.cpuTimer);
+        state.cpuTimer = null;
+      }
+    }
+
+    function chooseCpuMove() {
+      const candidates = getOpenPoints();
+      if (candidates.length === 0) return null;
+
+      let bestMove = candidates[0];
+      let bestScore = -Infinity;
+
+      candidates.forEach(move => {
+        const score = scoreCpuMove(move.x, move.y);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = move;
+        }
+      });
+
+      return bestMove;
+    }
+
+    function getOpenPoints() {
+      const points = [];
+      for (let y = 0; y < state.size; y += 1) {
+        for (let x = 0; x < state.size; x += 1) {
+          if (!state.points[pointIndex(x, y)]) {
+            points.push({ x, y });
+          }
+        }
+      }
+      return points;
+    }
+
+    function scoreCpuMove(x, y) {
+      const redCaptures = findCapturesForHypothetical(x, y, "red", "red").length;
+      const blockedBlueCaptures = findCapturesForHypothetical(x, y, "red", "blue").length;
+      const adjacent = getAdjacentSquareStats(x, y);
+      const center = (state.size - 1) / 2;
+      const distanceFromCenter = Math.abs(x - center) + Math.abs(y - center);
+
+      return (
+        redCaptures * 10000 +
+        blockedBlueCaptures * 4500 +
+        adjacent.redPairs * 120 +
+        adjacent.redSingles * 16 -
+        adjacent.bluePairs * 80 -
+        distanceFromCenter * 0.2 +
+        Math.random() * 0.1
+      );
+    }
+
+    function findCapturesForHypothetical(x, y, placedOwner, capturePlayer) {
+      const index = pointIndex(x, y);
+      const previous = state.points[index];
+      state.points[index] = placedOwner;
+      const captures = findCaptures(x, y, capturePlayer);
+      state.points[index] = previous;
+      return captures;
+    }
+
+    function getAdjacentSquareStats(pointX, pointY) {
+      const stats = {
+        redPairs: 0,
+        redSingles: 0,
+        bluePairs: 0
+      };
+      const candidates = [
+        [pointX - 1, pointY - 1],
+        [pointX, pointY - 1],
+        [pointX - 1, pointY],
+        [pointX, pointY]
+      ];
+
+      candidates.forEach(([x, y]) => {
+        if (x < 0 || y < 0 || x >= state.size - 1 || y >= state.size - 1) return;
+        if (state.squares[squareIndex(x, y)].owner) return;
+
+        const corners = [
+          state.points[pointIndex(x, y)],
+          state.points[pointIndex(x + 1, y)],
+          state.points[pointIndex(x, y + 1)],
+          state.points[pointIndex(x + 1, y + 1)]
+        ];
+        const redCount = corners.filter(owner => owner === "red").length;
+        const blueCount = corners.filter(owner => owner === "blue").length;
+
+        if (redCount >= 2 && blueCount === 0) stats.redPairs += 1;
+        if (redCount === 1 && blueCount === 0) stats.redSingles += 1;
+        if (blueCount >= 2 && redCount === 0) stats.bluePairs += 1;
+      });
+
+      return stats;
     }
 
     function findCaptures(pointX, pointY, player) {
@@ -801,7 +957,7 @@
         const square = state.squares[squareIndex(x, y)];
         if (square.owner) return;
 
-          const corners = [
+        const corners = [
           state.points[pointIndex(x, y)],
           state.points[pointIndex(x + 1, y)],
           state.points[pointIndex(x, y + 1)],
@@ -947,13 +1103,33 @@
       log.prepend(entry);
     }
 
-    boardSize.addEventListener("change", event => newGame(event.target.value));
-    newGameButton.addEventListener("click", () => newGame(state.size));
-    playAgainButton.addEventListener("click", () => newGame(state.size));
-    undoButton.addEventListener("click", () => {
+    function undoMove() {
+      if (state.history.length === 0 || state.cpuThinking) return;
+
+      if (state.mode === "cpu") {
+        let previous = state.history.pop();
+        while (previous && previous.current === "red" && state.history.length > 0) {
+          previous = state.history.pop();
+        }
+        if (previous) {
+          restore(previous, { queueCpu: false });
+          updateLog("Human turn restored.");
+        }
+        return;
+      }
+
       const previous = state.history.pop();
       if (previous) restore(previous);
+    }
+
+    boardSize.addEventListener("change", event => newGame(event.target.value));
+    gameMode.addEventListener("change", event => {
+      state.mode = event.target.value;
+      newGame(state.size);
     });
+    newGameButton.addEventListener("click", () => newGame(state.size));
+    playAgainButton.addEventListener("click", () => newGame(state.size));
+    undoButton.addEventListener("click", undoMove);
 
     newGame();
   </script>
