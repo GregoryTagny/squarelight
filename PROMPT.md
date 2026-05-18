@@ -36,7 +36,10 @@ The game is called Squarelight. It is inspired by tic tac toe-style point placem
 - The app should show the board, current player, scores, move count, captured square count, and a play log.
 - Include board-size controls.
 - Include a game-mode control.
+- Include 5 CPU difficulty levels.
 - Include New Game and Undo controls.
 - In CPU mode, the CPU should prioritize capturing available squares, blocking the human's immediate captures, and building toward its own future captures.
+- Higher CPU difficulty should reduce randomness, increase blocking/capturing priority, and add stronger anticipation of the human's next possible capture.
+- The latest move played should be clearly highlighted on the board.
 - The interface should be clean, modern, responsive, and usable on desktop and mobile.
 - The game should run as a self-contained static web page with no build step.

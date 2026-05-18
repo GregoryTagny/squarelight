@@ -353,8 +353,46 @@
       background: var(--red);
     }
 
+    .point.latest {
+      box-shadow:
+        0 0 0 5px rgba(255, 255, 255, 0.92),
+        0 0 0 9px rgba(23, 32, 51, 0.34),
+        0 10px 24px rgba(23, 32, 51, 0.22);
+      z-index: 4;
+    }
+
+    .point.latest::after {
+      content: "";
+      position: absolute;
+      inset: -9px;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+      opacity: 0.6;
+      animation: latestPulse 1.3s ease-out infinite;
+    }
+
+    .point.latest.blue {
+      color: var(--blue);
+    }
+
+    .point.latest.red {
+      color: var(--red);
+    }
+
     .point:disabled {
       cursor: default;
+    }
+
+    @keyframes latestPulse {
+      from {
+        transform: scale(0.82);
+        opacity: 0.75;
+      }
+
+      to {
+        transform: scale(1.28);
+        opacity: 0;
+      }
     }
 
     .log {
@@ -505,6 +543,16 @@
             <option value="cpu">Human vs CPU</option>
           </select>
         </div>
+        <div class="control-row">
+          <label for="cpuDifficulty">CPU</label>
+          <select id="cpuDifficulty">
+            <option value="1">1 - Casual</option>
+            <option value="2">2 - Easy</option>
+            <option value="3" selected>3 - Balanced</option>
+            <option value="4">4 - Hard</option>
+            <option value="5">5 - Expert</option>
+          </select>
+        </div>
         <div class="buttons">
           <button class="button" id="newGameButton" type="button">New Game</button>
           <button class="button secondary" id="undoButton" type="button" disabled>Undo</button>
@@ -574,6 +622,8 @@
       gameOver: false,
       endReason: "",
       mode: "human",
+      cpuDifficulty: 3,
+      lastMove: null,
       cpuThinking: false,
       cpuTimer: null
     };
@@ -581,6 +631,7 @@
     const board = document.getElementById("board");
     const boardSize = document.getElementById("boardSize");
     const gameMode = document.getElementById("gameMode");
+    const cpuDifficulty = document.getElementById("cpuDifficulty");
     const blueScore = document.getElementById("blueScore");
     const redScore = document.getElementById("redScore");
     const blueScoreBox = document.getElementById("blueScoreBox");
@@ -622,7 +673,9 @@
         moves: state.moves,
         gameOver: state.gameOver,
         endReason: state.endReason,
-        mode: state.mode
+        mode: state.mode,
+        cpuDifficulty: state.cpuDifficulty,
+        lastMove: state.lastMove ? { ...state.lastMove } : null
       };
     }
 
@@ -636,6 +689,8 @@
       state.gameOver = previous.gameOver;
       state.endReason = previous.endReason || "";
       state.mode = previous.mode || state.mode;
+      state.cpuDifficulty = previous.cpuDifficulty || state.cpuDifficulty;
+      state.lastMove = previous.lastMove ? { ...previous.lastMove } : null;
       state.cpuThinking = false;
       clearCpuTimer();
       winnerModal.classList.remove("open");
@@ -663,9 +718,11 @@
       state.history = [];
       state.gameOver = false;
       state.endReason = "";
+      state.lastMove = null;
       state.cpuThinking = false;
       boardSize.value = String(state.size);
       gameMode.value = state.mode;
+      cpuDifficulty.value = String(state.cpuDifficulty);
       board.style.setProperty("--point-size", getPointSize());
       board.style.setProperty("--square-font-size", getSquareFontSize());
       winnerModal.classList.remove("open");
@@ -728,11 +785,12 @@
           const owner = state.points[index];
           const point = document.createElement("button");
           point.type = "button";
-          point.className = `point ${owner || ""}`;
+          const isLatest = state.lastMove && state.lastMove.x === x && state.lastMove.y === y;
+          point.className = `point ${owner || ""} ${isLatest ? "latest" : ""}`;
           point.style.left = `${(x / (state.size - 1)) * 100}%`;
           point.style.top = `${(y / (state.size - 1)) * 100}%`;
           point.disabled = Boolean(owner) || state.gameOver || isCpuTurn();
-          point.setAttribute("aria-label", owner ? `${players[owner].name} point` : `Place at column ${x + 1}, row ${y + 1}`);
+          point.setAttribute("aria-label", owner ? `${players[owner].name} point${isLatest ? ", latest move" : ""}` : `Place at column ${x + 1}, row ${y + 1}`);
           point.addEventListener("click", () => placePoint(x, y));
           board.appendChild(point);
         }
@@ -743,6 +801,7 @@
       blueScore.textContent = state.scores.blue;
       redScore.textContent = state.scores.red;
       redPlayerName.textContent = state.mode === "cpu" ? "CPU" : "Red";
+      cpuDifficulty.disabled = state.mode !== "cpu";
       movesCount.textContent = state.moves;
 
       const claimed = state.squares.filter(square => square.owner).length;
@@ -771,6 +830,7 @@
       const before = snapshot();
       const player = state.current;
       state.points[index] = player;
+      state.lastMove = { x, y, player };
       state.moves += 1;
 
       const captures = findCaptures(x, y, player);
@@ -855,12 +915,17 @@
     function chooseCpuMove() {
       const candidates = getOpenPoints();
       if (candidates.length === 0) return null;
+      const config = getCpuDifficultyConfig();
+
+      if (Math.random() < config.randomMoveChance) {
+        return candidates[Math.floor(Math.random() * candidates.length)];
+      }
 
       let bestMove = candidates[0];
       let bestScore = -Infinity;
 
       candidates.forEach(move => {
-        const score = scoreCpuMove(move.x, move.y);
+        const score = scoreCpuMove(move.x, move.y, config);
         if (score > bestScore) {
           bestScore = score;
           bestMove = move;
@@ -882,22 +947,121 @@
       return points;
     }
 
-    function scoreCpuMove(x, y) {
+    function scoreCpuMove(x, y, config) {
       const redCaptures = findCapturesForHypothetical(x, y, "red", "red").length;
       const blockedBlueCaptures = findCapturesForHypothetical(x, y, "red", "blue").length;
       const adjacent = getAdjacentSquareStats(x, y);
+      const blueReplyThreats = config.lookAhead ? countOpponentRepliesAfterMove(x, y) : 0;
       const center = (state.size - 1) / 2;
       const distanceFromCenter = Math.abs(x - center) + Math.abs(y - center);
 
       return (
-        redCaptures * 10000 +
-        blockedBlueCaptures * 4500 +
-        adjacent.redPairs * 120 +
-        adjacent.redSingles * 16 -
-        adjacent.bluePairs * 80 -
-        distanceFromCenter * 0.2 +
-        Math.random() * 0.1
+        redCaptures * config.capture +
+        blockedBlueCaptures * config.block +
+        adjacent.redTriples * config.redTriple +
+        adjacent.redPairs * config.redPair +
+        adjacent.redSingles * config.redSingle -
+        adjacent.blueTriples * config.blueTriplePenalty -
+        adjacent.bluePairs * config.bluePairPenalty -
+        blueReplyThreats * config.lookAheadPenalty -
+        distanceFromCenter * config.centerPenalty +
+        Math.random() * config.noise
       );
+    }
+
+    function getCpuDifficultyConfig() {
+      const level = Number(state.cpuDifficulty);
+      const configs = {
+        1: {
+          capture: 900,
+          block: 80,
+          redTriple: 45,
+          redPair: 10,
+          redSingle: 2,
+          blueTriplePenalty: 0,
+          bluePairPenalty: 0,
+          lookAheadPenalty: 0,
+          centerPenalty: 0,
+          randomMoveChance: 0.48,
+          noise: 150,
+          lookAhead: false
+        },
+        2: {
+          capture: 2500,
+          block: 900,
+          redTriple: 160,
+          redPair: 35,
+          redSingle: 5,
+          blueTriplePenalty: 90,
+          bluePairPenalty: 8,
+          lookAheadPenalty: 0,
+          centerPenalty: 0.05,
+          randomMoveChance: 0.22,
+          noise: 60,
+          lookAhead: false
+        },
+        3: {
+          capture: 10000,
+          block: 4500,
+          redTriple: 700,
+          redPair: 120,
+          redSingle: 16,
+          blueTriplePenalty: 650,
+          bluePairPenalty: 80,
+          lookAheadPenalty: 0,
+          centerPenalty: 0.2,
+          randomMoveChance: 0.06,
+          noise: 0.1,
+          lookAhead: false
+        },
+        4: {
+          capture: 16000,
+          block: 9000,
+          redTriple: 1400,
+          redPair: 220,
+          redSingle: 20,
+          blueTriplePenalty: 1500,
+          bluePairPenalty: 170,
+          lookAheadPenalty: 0,
+          centerPenalty: 0.28,
+          randomMoveChance: 0.015,
+          noise: 0.05,
+          lookAhead: false
+        },
+        5: {
+          capture: 24000,
+          block: 15000,
+          redTriple: 2500,
+          redPair: 420,
+          redSingle: 28,
+          blueTriplePenalty: 2800,
+          bluePairPenalty: 280,
+          lookAheadPenalty: 2200,
+          centerPenalty: 0.36,
+          randomMoveChance: 0,
+          noise: 0.01,
+          lookAhead: true
+        }
+      };
+
+      return configs[level] || configs[3];
+    }
+
+    function countOpponentRepliesAfterMove(x, y) {
+      const index = pointIndex(x, y);
+      const previous = state.points[index];
+      state.points[index] = "red";
+
+      let total = 0;
+      for (let pointY = 0; pointY < state.size; pointY += 1) {
+        for (let pointX = 0; pointX < state.size; pointX += 1) {
+          if (state.points[pointIndex(pointX, pointY)]) continue;
+          total += findCapturesForHypothetical(pointX, pointY, "blue", "blue").length;
+        }
+      }
+
+      state.points[index] = previous;
+      return total;
     }
 
     function findCapturesForHypothetical(x, y, placedOwner, capturePlayer) {
@@ -911,8 +1075,10 @@
 
     function getAdjacentSquareStats(pointX, pointY) {
       const stats = {
+        redTriples: 0,
         redPairs: 0,
         redSingles: 0,
+        blueTriples: 0,
         bluePairs: 0
       };
       const candidates = [
@@ -935,8 +1101,10 @@
         const redCount = corners.filter(owner => owner === "red").length;
         const blueCount = corners.filter(owner => owner === "blue").length;
 
+        if (redCount === 3 && blueCount === 0) stats.redTriples += 1;
         if (redCount >= 2 && blueCount === 0) stats.redPairs += 1;
         if (redCount === 1 && blueCount === 0) stats.redSingles += 1;
+        if (blueCount === 3 && redCount === 0) stats.blueTriples += 1;
         if (blueCount >= 2 && redCount === 0) stats.bluePairs += 1;
       });
 
@@ -1126,6 +1294,11 @@
     gameMode.addEventListener("change", event => {
       state.mode = event.target.value;
       newGame(state.size);
+    });
+    cpuDifficulty.addEventListener("change", event => {
+      state.cpuDifficulty = Number(event.target.value);
+      updateLog(`CPU difficulty set to level ${state.cpuDifficulty}.`);
+      render();
     });
     newGameButton.addEventListener("click", () => newGame(state.size));
     playAgainButton.addEventListener("click", () => newGame(state.size));
