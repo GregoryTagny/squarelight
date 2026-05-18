@@ -1,0 +1,8 @@
+# Keep this repository focused on the Squarelight app code.
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.pdf
+
+.DS_Store

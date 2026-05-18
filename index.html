@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Squarelight</title>
+  <style>
+    :root {
+      --blue: #2563eb;
+      --blue-soft: rgba(37, 99, 235, 0.18);
+      --red: #dc2626;
+      --red-soft: rgba(220, 38, 38, 0.18);
+      --ink: #172033;
+      --muted: #657084;
+      --line: #ccd4df;
+      --paper: #f7f4ec;
+      --panel: #ffffff;
+      --shadow: 0 20px 55px rgba(23, 32, 51, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        linear-gradient(135deg, rgba(247, 244, 236, 0.95), rgba(237, 243, 246, 0.92)),
+        radial-gradient(circle at 15% 20%, rgba(37, 99, 235, 0.12), transparent 32%),
+        radial-gradient(circle at 85% 25%, rgba(220, 38, 38, 0.09), transparent 30%);
+    }
+
+    button,
+    select {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1180px, calc(100vw - 32px));
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 28px 0;
+      display: grid;
+      grid-template-columns: minmax(290px, 360px) minmax(320px, 1fr);
+      gap: 28px;
+      align-items: center;
+    }
+
+    .sidebar {
+      display: grid;
+      gap: 18px;
+      align-content: center;
+    }
+
+    .brand {
+      display: grid;
+      gap: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4.2rem);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .tagline {
+      margin: 0;
+      max-width: 34rem;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.55;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(120, 132, 153, 0.24);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .scores {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .score {
+      border-radius: 8px;
+      padding: 14px;
+      border: 1px solid rgba(120, 132, 153, 0.24);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .score.active {
+      outline: 3px solid var(--active-glow);
+      border-color: var(--player-color);
+    }
+
+    .score-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.83rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .chip {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--player-color);
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+    }
+
+    .score-value {
+      margin-top: 8px;
+      font-size: 2.35rem;
+      line-height: 1;
+      font-weight: 850;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat {
+      border-top: 1px solid rgba(120, 132, 153, 0.24);
+      padding-top: 12px;
+    }
+
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 1.05rem;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .control-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 750;
+    }
+
+    select {
+      min-width: 136px;
+      border: 1px solid rgba(120, 132, 153, 0.42);
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+      padding: 10px 12px;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .button {
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: pointer;
+      color: white;
+      background: var(--ink);
+      font-weight: 800;
+      transition: transform 150ms ease, filter 150ms ease;
+    }
+
+    .button.secondary {
+      color: var(--ink);
+      background: #e5ebef;
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .button:not(:disabled):hover {
+      transform: translateY(-1px);
+      filter: brightness(1.02);
+    }
+
+    .rules {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.92rem;
+    }
+
+    .board-zone {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+    }
+
+    .status {
+      width: min(100%, 720px);
+      min-height: 60px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(120, 132, 153, 0.24);
+      box-shadow: 0 10px 28px rgba(23, 32, 51, 0.08);
+    }
+
+    .turn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-weight: 850;
+    }
+
+    .turn-text {
+      overflow-wrap: anywhere;
+    }
+
+    .capture-note {
+      color: var(--muted);
+      font-size: 0.95rem;
+      text-align: right;
+    }
+
+    .board-shell {
+      width: min(88vw, 680px, calc(100vh - 190px));
+      padding: clamp(16px, 3vw, 26px);
+      border-radius: 8px;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(241, 246, 249, 0.86));
+      border: 1px solid rgba(120, 132, 153, 0.28);
+      box-shadow: var(--shadow);
+    }
+
+    .board {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1;
+      touch-action: manipulation;
+    }
+
+    .line {
+      position: absolute;
+      background: var(--line);
+      border-radius: 999px;
+      pointer-events: none;
+    }
+
+    .line.horizontal {
+      height: 3px;
+      transform: translateY(-50%);
+    }
+
+    .line.vertical {
+      width: 3px;
+      transform: translateX(-50%);
+    }
+
+    .square {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-weight: 900;
+      font-size: var(--square-font-size, clamp(1.2rem, 5vw, 2.7rem));
+      pointer-events: none;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+      overflow: hidden;
+    }
+
+    .square.mixed {
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.48);
+      border-color: rgba(120, 132, 153, 0.22);
+    }
+
+    .square.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+      border-color: rgba(37, 99, 235, 0.45);
+    }
+
+    .square.red {
+      color: var(--red);
+      background: var(--red-soft);
+      border-color: rgba(220, 38, 38, 0.45);
+    }
+
+    .point {
+      position: absolute;
+      width: var(--point-size, clamp(32px, 6.5vw, 54px));
+      height: var(--point-size, clamp(32px, 6.5vw, 54px));
+      transform: translate(-50%, -50%);
+      border: 3px solid white;
+      border-radius: 50%;
+      background: #f9fbfc;
+      box-shadow: 0 8px 18px rgba(23, 32, 51, 0.14);
+      cursor: pointer;
+      transition: background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+      z-index: 3;
+    }
+
+    .point:hover:not(:disabled) {
+      transform: translate(-50%, -50%) scale(1.08);
+      box-shadow: 0 10px 24px rgba(23, 32, 51, 0.18);
+    }
+
+    .point:focus-visible {
+      outline: 4px solid rgba(23, 32, 51, 0.22);
+      outline-offset: 3px;
+    }
+
+    .point.blue {
+      background: var(--blue);
+    }
+
+    .point.red {
+      background: var(--red);
+    }
+
+    .point:disabled {
+      cursor: default;
+    }
+
+    .log {
+      width: min(100%, 720px);
+      min-height: 88px;
+      max-height: 132px;
+      overflow: auto;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.74);
+      border: 1px solid rgba(120, 132, 153, 0.24);
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .log p {
+      margin: 0;
+    }
+
+    .log p + p {
+      margin-top: 7px;
+    }
+
+    .winner {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 20px;
+      background: rgba(23, 32, 51, 0.48);
+      z-index: 10;
+    }
+
+    .winner.open {
+      display: grid;
+    }
+
+    .winner-box {
+      width: min(420px, 100%);
+      border-radius: 8px;
+      background: white;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      border-top: 8px solid var(--player-color, var(--ink));
+    }
+
+    .winner-box h2 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      letter-spacing: 0;
+    }
+
+    .winner-box p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      .sidebar {
+        align-content: start;
+      }
+
+      .brand {
+        text-align: center;
+      }
+
+      .tagline {
+        margin: 0 auto;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .app {
+        width: min(100vw - 18px, 1180px);
+        padding: 12px 0;
+        gap: 16px;
+      }
+
+      .panel,
+      .status,
+      .log {
+        padding: 12px;
+      }
+
+      .scores,
+      .meta,
+      .buttons {
+        grid-template-columns: 1fr;
+      }
+
+      .status {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .capture-note {
+        text-align: left;
+      }
+
+      .board-shell {
+        width: min(96vw, 680px);
+        padding: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="sidebar" aria-label="Game controls">
+      <div class="brand">
+        <h1>Squarelight</h1>
+        <p class="tagline">Place one point, claim four matching corners, light up the square, then keep the turn if your move scored.</p>
+      </div>
+
+      <div class="panel scores" aria-label="Scores">
+        <div class="score active" id="blueScoreBox" style="--player-color: var(--blue); --active-glow: rgba(37, 99, 235, 0.24)">
+          <div class="score-label"><span class="chip"></span> Blue</div>
+          <div class="score-value" id="blueScore">0</div>
+        </div>
+        <div class="score" id="redScoreBox" style="--player-color: var(--red); --active-glow: rgba(220, 38, 38, 0.24)">
+          <div class="score-label"><span class="chip"></span> Red</div>
+          <div class="score-value" id="redScore">0</div>
+        </div>
+      </div>
+
+      <div class="panel controls">
+        <div class="control-row">
+          <label for="boardSize">Board</label>
+          <select id="boardSize">
+            <option value="5">5 x 5 points</option>
+            <option value="10">10 x 10 points</option>
+            <option value="15">15 x 15 points</option>
+            <option value="20">20 x 20 points</option>
+            <option value="25" selected>25 x 25 points</option>
+          </select>
+        </div>
+        <div class="buttons">
+          <button class="button" id="newGameButton" type="button">New Game</button>
+          <button class="button secondary" id="undoButton" type="button" disabled>Undo</button>
+        </div>
+      </div>
+
+      <div class="panel meta">
+        <div class="stat">
+          <span>Moves</span>
+          <strong id="movesCount">0</strong>
+        </div>
+        <div class="stat">
+          <span>Squares</span>
+          <strong id="squaresCount">0 / 16</strong>
+        </div>
+      </div>
+
+      <div class="panel">
+        <ol class="rules">
+          <li>Pick an empty point in your color.</li>
+          <li>A player captures a square only when all four corners are their color.</li>
+          <li>Only captured scoring squares show a number.</li>
+          <li>Capture at least one square to play again.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="board-zone" aria-label="Squarelight board">
+      <div class="status">
+        <div class="turn">
+          <span class="chip" id="turnChip" style="--player-color: var(--blue)"></span>
+          <span class="turn-text" id="turnText">Blue to play</span>
+        </div>
+        <div class="capture-note" id="captureNote">Complete a square to take another turn.</div>
+      </div>
+
+      <div class="board-shell">
+        <div class="board" id="board" aria-label="Point grid"></div>
+      </div>
+
+      <div class="log" id="log" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <div class="winner" id="winnerModal" role="dialog" aria-modal="true" aria-labelledby="winnerTitle">
+    <div class="winner-box" id="winnerBox">
+      <h2 id="winnerTitle">Game Over</h2>
+      <p id="winnerText"></p>
+      <button class="button" id="playAgainButton" type="button">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    const players = {
+      blue: { name: "Blue", color: "var(--blue)" },
+      red: { name: "Red", color: "var(--red)" }
+    };
+
+    const state = {
+      size: 25,
+      current: "blue",
+      points: [],
+      squares: [],
+      scores: { blue: 0, red: 0 },
+      moves: 0,
+      history: [],
+      gameOver: false,
+      endReason: ""
+    };
+
+    const board = document.getElementById("board");
+    const boardSize = document.getElementById("boardSize");
+    const blueScore = document.getElementById("blueScore");
+    const redScore = document.getElementById("redScore");
+    const blueScoreBox = document.getElementById("blueScoreBox");
+    const redScoreBox = document.getElementById("redScoreBox");
+    const turnChip = document.getElementById("turnChip");
+    const turnText = document.getElementById("turnText");
+    const captureNote = document.getElementById("captureNote");
+    const movesCount = document.getElementById("movesCount");
+    const squaresCount = document.getElementById("squaresCount");
+    const log = document.getElementById("log");
+    const newGameButton = document.getElementById("newGameButton");
+    const undoButton = document.getElementById("undoButton");
+    const winnerModal = document.getElementById("winnerModal");
+    const winnerBox = document.getElementById("winnerBox");
+    const winnerTitle = document.getElementById("winnerTitle");
+    const winnerText = document.getElementById("winnerText");
+    const playAgainButton = document.getElementById("playAgainButton");
+
+    function pointIndex(x, y) {
+      return y * state.size + x;
+    }
+
+    function squareIndex(x, y) {
+      return y * (state.size - 1) + x;
+    }
+
+    function otherPlayer(player) {
+      return player === "blue" ? "red" : "blue";
+    }
+
+    function snapshot() {
+      return {
+        size: state.size,
+        current: state.current,
+        points: [...state.points],
+        squares: state.squares.map(square => ({ ...square })),
+        scores: { ...state.scores },
+        moves: state.moves,
+        gameOver: state.gameOver,
+        endReason: state.endReason
+      };
+    }
+
+    function restore(previous) {
+      state.size = previous.size;
+      state.current = previous.current;
+      state.points = [...previous.points];
+      state.squares = previous.squares.map(square => ({ ...square }));
+      state.scores = { ...previous.scores };
+      state.moves = previous.moves;
+      state.gameOver = previous.gameOver;
+      state.endReason = previous.endReason || "";
+      winnerModal.classList.remove("open");
+      render();
+      updateLog(`${players[state.current].name}'s turn restored.`);
+    }
+
+    function newGame(size = state.size) {
+      state.size = Number(size);
+      state.current = "blue";
+      state.points = Array(state.size * state.size).fill(null);
+      state.squares = Array((state.size - 1) * (state.size - 1)).fill(null).map(() => ({
+        owner: null,
+        value: 0,
+        blueCount: 0,
+        redCount: 0,
+        completed: false
+      }));
+      state.scores = { blue: 0, red: 0 };
+      state.moves = 0;
+      state.history = [];
+      state.gameOver = false;
+      state.endReason = "";
+      boardSize.value = String(state.size);
+      board.style.setProperty("--point-size", getPointSize());
+      board.style.setProperty("--square-font-size", getSquareFontSize());
+      winnerModal.classList.remove("open");
+      log.innerHTML = "";
+      updateLog("New game. Blue opens the board.");
+      render();
+    }
+
+    function render() {
+      board.innerHTML = "";
+      renderLines();
+      renderSquares();
+      renderPoints();
+      renderHud();
+    }
+
+    function renderLines() {
+      for (let i = 0; i < state.size; i += 1) {
+        const position = `${(i / (state.size - 1)) * 100}%`;
+
+        const horizontal = document.createElement("div");
+        horizontal.className = "line horizontal";
+        horizontal.style.left = "0";
+        horizontal.style.right = "0";
+        horizontal.style.top = position;
+        board.appendChild(horizontal);
+
+        const vertical = document.createElement("div");
+        vertical.className = "line vertical";
+        vertical.style.top = "0";
+        vertical.style.bottom = "0";
+        vertical.style.left = position;
+        board.appendChild(vertical);
+      }
+    }
+
+    function renderSquares() {
+      const step = 100 / (state.size - 1);
+      for (let y = 0; y < state.size - 1; y += 1) {
+        for (let x = 0; x < state.size - 1; x += 1) {
+          const square = state.squares[squareIndex(x, y)];
+          const element = document.createElement("div");
+          element.className = `square ${square.owner || (square.completed ? "mixed" : "")}`;
+          element.style.left = `${x * step}%`;
+          element.style.top = `${y * step}%`;
+          element.style.width = `${step}%`;
+          element.style.height = `${step}%`;
+          if (square.owner) {
+            element.textContent = square.value;
+          }
+          board.appendChild(element);
+        }
+      }
+    }
+
+    function renderPoints() {
+      for (let y = 0; y < state.size; y += 1) {
+        for (let x = 0; x < state.size; x += 1) {
+          const index = pointIndex(x, y);
+          const owner = state.points[index];
+          const point = document.createElement("button");
+          point.type = "button";
+          point.className = `point ${owner || ""}`;
+          point.style.left = `${(x / (state.size - 1)) * 100}%`;
+          point.style.top = `${(y / (state.size - 1)) * 100}%`;
+          point.disabled = Boolean(owner) || state.gameOver;
+          point.setAttribute("aria-label", owner ? `${players[owner].name} point` : `Place at column ${x + 1}, row ${y + 1}`);
+          point.addEventListener("click", () => placePoint(x, y));
+          board.appendChild(point);
+        }
+      }
+    }
+
+    function renderHud() {
+      blueScore.textContent = state.scores.blue;
+      redScore.textContent = state.scores.red;
+      movesCount.textContent = state.moves;
+
+      const claimed = state.squares.filter(square => square.owner).length;
+      squaresCount.textContent = `${claimed} / ${state.squares.length}`;
+
+      blueScoreBox.classList.toggle("active", state.current === "blue" && !state.gameOver);
+      redScoreBox.classList.toggle("active", state.current === "red" && !state.gameOver);
+      turnChip.style.setProperty("--player-color", players[state.current].color);
+      turnText.textContent = state.gameOver ? "Game complete" : `${players[state.current].name} to play`;
+      undoButton.disabled = state.history.length === 0;
+    }
+
+    function placePoint(x, y) {
+      if (state.gameOver) return;
+
+      const index = pointIndex(x, y);
+      if (state.points[index]) return;
+
+      const before = snapshot();
+      const player = state.current;
+      state.points[index] = player;
+      state.moves += 1;
+
+      const captures = findCaptures(x, y, player);
+      updateCompletedSquares();
+
+      captures.forEach(capture => {
+        const square = state.squares[squareIndex(capture.x, capture.y)];
+        const nextScore = state.scores[player] + 1;
+        square.owner = player;
+        square.value = nextScore;
+        square.blueCount = capture.blueCount;
+        square.redCount = capture.redCount;
+        square.completed = true;
+        state.scores[player] = nextScore;
+      });
+
+      state.history.push(before);
+
+      if (captures.length > 0) {
+        const total = captures.length;
+        const plural = captures.length === 1 ? "square" : "squares";
+        updateLog(`${players[player].name} captured ${captures.length} ${plural} for ${total} point${total === 1 ? "" : "s"}. ${players[player].name} plays again.`);
+        captureNote.textContent = `${players[player].name} scored and keeps the turn.`;
+      } else {
+        state.current = otherPlayer(player);
+        updateLog(`${players[player].name} placed a point. ${players[state.current].name} takes the turn.`);
+        captureNote.textContent = "Complete a square to take another turn.";
+      }
+
+      if (state.points.every(Boolean)) {
+        state.gameOver = true;
+        state.endReason = "All points are filled.";
+        showWinner();
+      } else {
+        const certainOutcome = getCertainOutcome();
+        if (certainOutcome) {
+          state.gameOver = true;
+          state.endReason = certainOutcome.reason;
+          updateLog(certainOutcome.reason);
+          showWinner();
+        }
+      }
+
+      render();
+    }
+
+    function findCaptures(pointX, pointY, player) {
+      const captures = [];
+      const candidates = [
+        [pointX - 1, pointY - 1],
+        [pointX, pointY - 1],
+        [pointX - 1, pointY],
+        [pointX, pointY]
+      ];
+
+      candidates.forEach(([x, y]) => {
+        if (x < 0 || y < 0 || x >= state.size - 1 || y >= state.size - 1) return;
+        const square = state.squares[squareIndex(x, y)];
+        if (square.owner) return;
+
+          const corners = [
+          state.points[pointIndex(x, y)],
+          state.points[pointIndex(x + 1, y)],
+          state.points[pointIndex(x, y + 1)],
+          state.points[pointIndex(x + 1, y + 1)]
+        ];
+
+        const blueCount = corners.filter(owner => owner === "blue").length;
+        const redCount = corners.filter(owner => owner === "red").length;
+
+        if (corners.every(owner => owner === player)) {
+          captures.push({
+            x,
+            y,
+            value: 1,
+            blueCount,
+            redCount
+          });
+        }
+      });
+
+      return captures;
+    }
+
+    function getPointSize() {
+      if (state.size >= 25) return "14px";
+      if (state.size >= 20) return "16px";
+      if (state.size >= 15) return "20px";
+      if (state.size >= 10) return "28px";
+      return "clamp(32px, 6.5vw, 54px)";
+    }
+
+    function getSquareFontSize() {
+      if (state.size >= 25) return "clamp(0.42rem, 1.05vw, 0.72rem)";
+      if (state.size >= 20) return "clamp(0.48rem, 1.35vw, 0.9rem)";
+      if (state.size >= 15) return "clamp(0.58rem, 1.8vw, 1.1rem)";
+      if (state.size >= 10) return "clamp(0.8rem, 2.4vw, 1.55rem)";
+      return "clamp(1.2rem, 5vw, 2.7rem)";
+    }
+
+    function updateCompletedSquares() {
+      for (let y = 0; y < state.size - 1; y += 1) {
+        for (let x = 0; x < state.size - 1; x += 1) {
+          const square = state.squares[squareIndex(x, y)];
+          if (square.owner) continue;
+
+          const corners = [
+            state.points[pointIndex(x, y)],
+            state.points[pointIndex(x + 1, y)],
+            state.points[pointIndex(x, y + 1)],
+            state.points[pointIndex(x + 1, y + 1)]
+          ];
+
+          if (corners.every(Boolean)) {
+            square.completed = true;
+            square.blueCount = corners.filter(owner => owner === "blue").length;
+            square.redCount = corners.filter(owner => owner === "red").length;
+          }
+        }
+      }
+    }
+
+    function getCertainOutcome() {
+      const bluePotential = countPotentialCaptures("blue");
+      const redPotential = countPotentialCaptures("red");
+      const blue = state.scores.blue;
+      const red = state.scores.red;
+
+      if (blue > red + redPotential) {
+        return {
+          winner: "blue",
+          reason: `Blue is mathematically safe. Red can capture at most ${redPotential} more square${redPotential === 1 ? "" : "s"}.`
+        };
+      }
+
+      if (red > blue + bluePotential) {
+        return {
+          winner: "red",
+          reason: `Red is mathematically safe. Blue can capture at most ${bluePotential} more square${bluePotential === 1 ? "" : "s"}.`
+        };
+      }
+
+      if (bluePotential === 0 && redPotential === 0) {
+        return {
+          winner: blue === red ? null : (blue > red ? "blue" : "red"),
+          reason: "No remaining square can be captured by either player."
+        };
+      }
+
+      return null;
+    }
+
+    function countPotentialCaptures(player) {
+      let total = 0;
+
+      for (let y = 0; y < state.size - 1; y += 1) {
+        for (let x = 0; x < state.size - 1; x += 1) {
+          const square = state.squares[squareIndex(x, y)];
+          if (square.owner) continue;
+
+          const corners = [
+            state.points[pointIndex(x, y)],
+            state.points[pointIndex(x + 1, y)],
+            state.points[pointIndex(x, y + 1)],
+            state.points[pointIndex(x + 1, y + 1)]
+          ];
+
+          if (corners.every(owner => owner === player || owner === null)) {
+            total += 1;
+          }
+        }
+      }
+
+      return total;
+    }
+
+    function showWinner() {
+      const blue = state.scores.blue;
+      const red = state.scores.red;
+      const blueSquares = state.squares.filter(square => square.owner === "blue").length;
+      const redSquares = state.squares.filter(square => square.owner === "red").length;
+
+      if (blue === red && blueSquares === redSquares) {
+        winnerTitle.textContent = "Draw Game";
+        winnerText.textContent = `${state.endReason} Both players finished with ${blue} points and ${blueSquares} captured squares.`;
+        winnerBox.style.setProperty("--player-color", "var(--ink)");
+      } else {
+        let winner = blue > red ? "blue" : "red";
+        if (blue === red) {
+          winner = blueSquares > redSquares ? "blue" : "red";
+        }
+        winnerTitle.textContent = `${players[winner].name} Wins`;
+        winnerText.textContent = `${state.endReason} Final score: Blue ${blue}, Red ${red}. Captured squares: Blue ${blueSquares}, Red ${redSquares}.`;
+        winnerBox.style.setProperty("--player-color", players[winner].color);
+      }
+
+      captureNote.textContent = state.endReason || "Game complete.";
+      winnerModal.classList.add("open");
+    }
+
+    function updateLog(message) {
+      const entry = document.createElement("p");
+      entry.textContent = message;
+      log.prepend(entry);
+    }
+
+    boardSize.addEventListener("change", event => newGame(event.target.value));
+    newGameButton.addEventListener("click", () => newGame(state.size));
+    playAgainButton.addEventListener("click", () => newGame(state.size));
+    undoButton.addEventListener("click", () => {
+      const previous = state.history.pop();
+      if (previous) restore(previous);
+    });
+
+    newGame();
+  </script>
+</body>
+</html>
