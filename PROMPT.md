@@ -40,6 +40,7 @@ The game is called Squarelight. It is inspired by tic tac toe-style point placem
 - Include New Game and Undo controls.
 - In CPU mode, the CPU should prioritize capturing available squares, blocking the human's immediate captures, and building toward its own future captures.
 - Higher CPU difficulty should reduce randomness, increase blocking/capturing priority, and add stronger anticipation of the human's next possible capture.
+- Expert CPU should use tactical candidate pruning and short lookahead: immediate captures, forced blocks, likely human replies, and a CPU follow-up evaluation.
 - The latest move played should be clearly highlighted on the board.
 - The interface should be clean, modern, responsive, and usable on desktop and mobile.
 - The game should run as a self-contained static web page with no build step.

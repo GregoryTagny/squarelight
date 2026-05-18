@@ -921,6 +921,10 @@
         return candidates[Math.floor(Math.random() * candidates.length)];
       }
 
+      if (config.tacticalSearch) {
+        return chooseExpertCpuMove(candidates, config);
+      }
+
       let bestMove = candidates[0];
       let bestScore = -Infinity;
 
@@ -933,6 +937,168 @@
       });
 
       return bestMove;
+    }
+
+    function chooseExpertCpuMove(candidates, config) {
+      const immediateCapture = bestMoveBy(candidates, move => findCapturesForHypothetical(move.x, move.y, "red", "red").length);
+      if (immediateCapture.score > 0) return immediateCapture.move;
+
+      const immediateBlock = bestMoveBy(candidates, move => findCapturesForHypothetical(move.x, move.y, "red", "blue").length);
+      if (immediateBlock.score > 0) return immediateBlock.move;
+
+      const tacticalCandidates = getTacticalCandidates("red", config.candidateLimit)
+        .map(move => ({
+          ...move,
+          score: scoreCpuMove(move.x, move.y, config) + evaluateLineControl(move.x, move.y, "red") * 36
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, config.searchWidth);
+
+      let bestMove = tacticalCandidates[0] || candidates[0];
+      let bestScore = -Infinity;
+
+      tacticalCandidates.forEach(move => {
+        const score = searchCpuLine(move, config);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = move;
+        }
+      });
+
+      return bestMove;
+    }
+
+    function bestMoveBy(candidates, scorer) {
+      let move = candidates[0] || null;
+      let score = -Infinity;
+
+      candidates.forEach(candidate => {
+        const candidateScore = scorer(candidate);
+        if (candidateScore > score) {
+          score = candidateScore;
+          move = candidate;
+        }
+      });
+
+      return { move, score };
+    }
+
+    function searchCpuLine(move, config) {
+      return simulateMove(move.x, move.y, "red", () => {
+        const redGain = findCaptures(move.x, move.y, "red").length;
+        let score = evaluateBoardForCpu() + redGain * 18000;
+        const blueReplies = getTacticalCandidates("blue", config.replyWidth)
+          .map(reply => ({
+            ...reply,
+            score: scoreHumanReply(reply.x, reply.y, config)
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, config.replyWidth);
+
+        if (blueReplies.length === 0) return score;
+
+        let worstReplyScore = Infinity;
+        blueReplies.forEach(reply => {
+          const replyScore = simulateMove(reply.x, reply.y, "blue", () => {
+            const blueGain = findCaptures(reply.x, reply.y, "blue").length;
+            const followUps = getTacticalCandidates("red", config.followUpWidth);
+            const bestFollowUp = bestMoveBy(followUps, followUp => (
+              scoreCpuMove(followUp.x, followUp.y, config) +
+              findCapturesForHypothetical(followUp.x, followUp.y, "red", "red").length * 12000
+            ));
+
+            const followUpValue = bestFollowUp.move ? bestFollowUp.score * 0.28 : 0;
+            return evaluateBoardForCpu() - blueGain * 21000 + followUpValue;
+          });
+
+          if (replyScore < worstReplyScore) {
+            worstReplyScore = replyScore;
+          }
+        });
+
+        return score * 0.35 + worstReplyScore * 0.65;
+      });
+    }
+
+    function scoreHumanReply(x, y, config) {
+      const blueCaptures = findCapturesForHypothetical(x, y, "blue", "blue").length;
+      const redBlocks = findCapturesForHypothetical(x, y, "blue", "red").length;
+      const adjacent = getAdjacentSquareStats(x, y);
+
+      return (
+        blueCaptures * 25000 +
+        redBlocks * 12000 +
+        adjacent.blueTriples * 3200 +
+        adjacent.bluePairs * 420 -
+        adjacent.redTriples * 1800 -
+        adjacent.redPairs * 180 +
+        evaluateLineControl(x, y, "blue") * 24 +
+        Math.random() * config.noise
+      );
+    }
+
+    function getTacticalCandidates(player, limit) {
+      const seen = new Set();
+      const candidates = [];
+
+      function addPoint(x, y) {
+        if (x < 0 || y < 0 || x >= state.size || y >= state.size) return;
+        if (state.points[pointIndex(x, y)]) return;
+        const key = `${x},${y}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        candidates.push({ x, y });
+      }
+
+      for (let y = 0; y < state.size; y += 1) {
+        for (let x = 0; x < state.size; x += 1) {
+          const owner = state.points[pointIndex(x, y)];
+          if (!owner) continue;
+          for (let dy = -2; dy <= 2; dy += 1) {
+            for (let dx = -2; dx <= 2; dx += 1) {
+              addPoint(x + dx, y + dy);
+            }
+          }
+        }
+      }
+
+      if (candidates.length === 0) {
+        const center = Math.floor(state.size / 2);
+        addPoint(center, center);
+        addPoint(center - 1, center);
+        addPoint(center, center - 1);
+        addPoint(center + 1, center);
+        addPoint(center, center + 1);
+      }
+
+      return candidates
+        .map(move => ({
+          ...move,
+          priority: scoreCandidatePriority(move.x, move.y, player)
+        }))
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, limit);
+    }
+
+    function scoreCandidatePriority(x, y, player) {
+      const opponent = otherPlayer(player);
+      const ownCaptures = findCapturesForHypothetical(x, y, player, player).length;
+      const blocks = findCapturesForHypothetical(x, y, player, opponent).length;
+      const stats = getAdjacentSquareStats(x, y);
+      const ownTriples = player === "red" ? stats.redTriples : stats.blueTriples;
+      const ownPairs = player === "red" ? stats.redPairs : stats.bluePairs;
+      const opponentTriples = player === "red" ? stats.blueTriples : stats.redTriples;
+      const opponentPairs = player === "red" ? stats.bluePairs : stats.redPairs;
+
+      return (
+        ownCaptures * 100000 +
+        blocks * 80000 +
+        ownTriples * 6000 +
+        opponentTriples * 5500 +
+        ownPairs * 750 +
+        opponentPairs * 650 +
+        evaluateLineControl(x, y, player) * 20
+      );
     }
 
     function getOpenPoints() {
@@ -951,7 +1117,7 @@
       const redCaptures = findCapturesForHypothetical(x, y, "red", "red").length;
       const blockedBlueCaptures = findCapturesForHypothetical(x, y, "red", "blue").length;
       const adjacent = getAdjacentSquareStats(x, y);
-      const blueReplyThreats = config.lookAhead ? countOpponentRepliesAfterMove(x, y) : 0;
+      const blueReplyThreats = config.lookAhead && !config.tacticalSearch ? countOpponentRepliesAfterMove(x, y) : 0;
       const center = (state.size - 1) / 2;
       const distanceFromCenter = Math.abs(x - center) + Math.abs(y - center);
 
@@ -1040,7 +1206,12 @@
           centerPenalty: 0.36,
           randomMoveChance: 0,
           noise: 0.01,
-          lookAhead: true
+          lookAhead: true,
+          tacticalSearch: true,
+          candidateLimit: 42,
+          searchWidth: 10,
+          replyWidth: 7,
+          followUpWidth: 6
         }
       };
 
@@ -1062,6 +1233,101 @@
 
       state.points[index] = previous;
       return total;
+    }
+
+    function simulateMove(x, y, player, callback) {
+      const point = pointIndex(x, y);
+      const previousPoint = state.points[point];
+      const previousScores = { ...state.scores };
+      const changedSquares = [];
+
+      state.points[point] = player;
+      const captures = findCaptures(x, y, player);
+      captures.forEach(capture => {
+        const index = squareIndex(capture.x, capture.y);
+        const square = state.squares[index];
+        changedSquares.push({ index, square: { ...square } });
+        square.owner = player;
+        square.value = state.scores[player] + 1;
+        square.blueCount = capture.blueCount;
+        square.redCount = capture.redCount;
+        square.completed = true;
+        state.scores[player] += 1;
+      });
+
+      const result = callback(captures);
+
+      changedSquares.forEach(change => {
+        state.squares[change.index] = change.square;
+      });
+      state.points[point] = previousPoint;
+      state.scores = previousScores;
+
+      return result;
+    }
+
+    function evaluateBoardForCpu() {
+      let score = (state.scores.red - state.scores.blue) * 50000;
+
+      for (let y = 0; y < state.size - 1; y += 1) {
+        for (let x = 0; x < state.size - 1; x += 1) {
+          const square = state.squares[squareIndex(x, y)];
+          if (square.owner === "red") {
+            score += 1200;
+            continue;
+          }
+          if (square.owner === "blue") {
+            score -= 1200;
+            continue;
+          }
+
+          const corners = [
+            state.points[pointIndex(x, y)],
+            state.points[pointIndex(x + 1, y)],
+            state.points[pointIndex(x, y + 1)],
+            state.points[pointIndex(x + 1, y + 1)]
+          ];
+          const redCount = corners.filter(owner => owner === "red").length;
+          const blueCount = corners.filter(owner => owner === "blue").length;
+
+          if (blueCount === 0) {
+            score += [0, 18, 130, 1300, 0][redCount];
+          }
+          if (redCount === 0) {
+            score -= [0, 18, 130, 1500, 0][blueCount];
+          }
+        }
+      }
+
+      return score;
+    }
+
+    function evaluateLineControl(x, y, player) {
+      let value = 0;
+      const directions = [
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [1, -1]
+      ];
+
+      directions.forEach(([dx, dy]) => {
+        let count = 0;
+        let open = 0;
+
+        for (let step = -3; step <= 3; step += 1) {
+          const px = x + dx * step;
+          const py = y + dy * step;
+          if (px < 0 || py < 0 || px >= state.size || py >= state.size) continue;
+          const owner = state.points[pointIndex(px, py)];
+          if (owner === player) count += 1;
+          if (!owner) open += 1;
+        }
+
+        value += count * count + open * 0.25;
+      });
+
+      return value;
     }
 
     function findCapturesForHypothetical(x, y, placedOwner, capturePlayer) {
